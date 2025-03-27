@@ -11,19 +11,34 @@ const uploadOnCloudinary = async (localFilePath) => {
   try {
     if (!localFilePath) return null;
 
+    console.log("Uploading file to Cloudinary:", localFilePath);
+
     const response = await cloudinary.uploader.upload(localFilePath, {
       resource_type: "auto",
       folder: "Internship Test",
     });
 
     if (!response) {
-      console.log("Error in uploading image on cloudinary");
+      console.error("Error in uploading image to Cloudinary.");
+      return null;
     }
 
-    fs.unlinkSync(localFilePath);
+    console.log("Image uploaded successfully:", response.secure_url);
+
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+      console.log("Temp file deleted:", localFilePath);
+    }
+
     return response;
   } catch (error) {
-    fs.unlinkSync(localFilePath);
+    console.error("Cloudinary Upload Error:", error);
+
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+      console.log("Temp file deleted after error:", localFilePath);
+    }
+
     return null;
   }
 };
