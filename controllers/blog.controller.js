@@ -50,10 +50,9 @@ async function handleAddNew(req, res) {
 
 async function handleGetAllBlogs(req, res) {
   try {
-    const response = await Blog.find({}).populate(
-      "createdBy",
-      "name email createdAt"
-    );
+    const response = await Blog.find({})
+      .sort({ createdAt: -1 })
+      .populate("createdBy", "name email createdAt");
 
     if (!response) {
       return res
@@ -81,7 +80,9 @@ async function handleGetAllBlogsOfUser(req, res) {
       return res.status(400).json(new ApiError(400, "User Id is required"));
     }
 
-    const response = await Blog.find({ createdBy: userId });
+    const response = await Blog.find({ createdBy: userId }).sort({
+      createdAt: -1,
+    });
 
     if (!response) {
       return res
