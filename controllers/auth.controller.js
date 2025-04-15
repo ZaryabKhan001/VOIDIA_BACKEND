@@ -3,7 +3,7 @@ import { ApiError } from "../services/ApiError.js";
 import User from "../models/user.model.js";
 import bcryptjs from "bcryptjs";
 import { generateVerificationCode } from "../services/generateVerificationCode.js";
-import { generateTokenAndSetCookie } from "../services/generateTokenAndSetCookie.js";
+import { generateToken } from "../services/generateToken.js";
 import {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -11,13 +11,17 @@ import {
   sendPasswordSuccessEmail,
 } from "../mailTrap/email.js";
 import crypto from "node:crypto";
+import { validationResult } from "express-validator";
 
 export const handleSignup = async (req, res) => {
   const { email, password, name } = req.body;
 
-  if (!email || !password || !name) {
-    return res.status(400).json(new ApiError(400, "Fields are Required"));
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
+
   try {
     const isUserAlreadyExists = await User.findOne({ email });
 
@@ -73,11 +77,13 @@ export const handleSignup = async (req, res) => {
 
 export const handleVerifyEmail = async (req, res) => {
   const { code } = req.body;
-  if (!code) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "Verification Code must be required"));
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
+
   try {
     const user = await User.findOne({
       verificationToken: code,
@@ -118,11 +124,13 @@ export const handleVerifyEmail = async (req, res) => {
 
 export const handleLogin = async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "Credentials must be required."));
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
+
   try {
     const user = await User.findOne({ email });
 
@@ -139,7 +147,7 @@ export const handleLogin = async (req, res) => {
       return res.status(403).json(new ApiError(403, "Invalid Password."));
     }
 
-    const w = generateTokenAndSetCookie(res, user._id);
+    const token = generateToken(user._id);
 
     user.lastLogin = new Date();
     const updatedUser = await user.save();
@@ -155,6 +163,7 @@ export const handleLogin = async (req, res) => {
         {
           ...updatedUser._doc,
           password: undefined,
+          token: token,
         },
         "Login Successfully"
       )
@@ -167,16 +176,9 @@ export const handleLogin = async (req, res) => {
 
 export const handleLogout = async (req, res) => {
   try {
-    res.clearCookie("token");
     return res
       .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          "User Logout Successfully",
-          "User Logout Successfully"
-        )
-      );
+      .json(new ApiResponse(200, {}, "User Logout Successfully"));
   } catch (error) {
     console.log("Error in Logging Out User", error);
     return res.status(500).json(new ApiError(500, "User Logout Error"));
@@ -185,8 +187,11 @@ export const handleLogout = async (req, res) => {
 
 export const handleForgotPassword = async (req, res) => {
   const { email } = req.body;
-  if (!email) {
-    return res.status(400).json(new ApiError(400, "Email must be required."));
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
   try {
     const user = await User.findOne({ email });
@@ -233,15 +238,12 @@ export const handleResetPassword = async (req, res) => {
   const { password } = req.body;
   const { token } = req.params;
 
-  if (!token) {
-    return res.status(400).json(new ApiError(400, "Token not Received."));
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
 
-  if (!password) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "Password must be required."));
-  }
   try {
     const user = await User.findOne({ resetPasswordToken: token });
 

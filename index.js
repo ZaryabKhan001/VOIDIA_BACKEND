@@ -4,7 +4,7 @@ import {} from "node:crypto";
 import { dbConnect } from "./database/dbConnect.js";
 import cookieParser from "cookie-parser";
 import authRouter from "./routes/auth.route.js";
-import blogRouter from "./routes/blog.route.js";
+import blogRouter from "./routes/blogs/index.js";
 import cors from "cors";
 
 dotenv.config();

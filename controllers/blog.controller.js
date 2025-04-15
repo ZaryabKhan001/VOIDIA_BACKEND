@@ -3,13 +3,14 @@ import Comment from "../models/comment.model.js";
 import { ApiError } from "../services/ApiError.js";
 import { ApiResponse } from "../services/ApiResponse.js";
 import { uploadOnCloudinary } from "../services/cloudinary.js";
+import { validationResult } from "express-validator";
 import mongoose from "mongoose";
 
 async function handleAddNew(req, res) {
+  const result = validationResult(req);
   const { title, content } = req.body;
-
-  if (!title || !content) {
-    return res.status(400).json(new ApiError(400, "Fields are Required."));
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
   }
 
   const coverImageLocalPath = req.file?.path;
@@ -101,8 +102,15 @@ async function handleGetAllBlogsOfUser(req, res) {
 
 async function handleGetBlog(req, res) {
   const { id } = req.params;
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
+  }
+
   try {
-    const response = await Blog.find({ _id: id })
+    const response = await Blog.findById(id)
       .populate("createdBy", "name email createdAt")
       .populate("comments");
 
@@ -131,16 +139,16 @@ async function handleUpdate(req, res) {
     const { id } = req.params;
     const { title, content, coverImage } = req.body;
 
+    const result = validationResult(req);
+
+    if (!result.isEmpty()) {
+      return res.status(400).json(new ApiError(400, result.array()));
+    }
+
     if (!id) {
       return res
         .status(400)
         .json(new ApiError(400, "Bad Request for updating Post"));
-    }
-
-    if (!title || !content) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Title and content are required"));
     }
     let newCoverImageUrl = coverImage;
 
@@ -184,6 +192,12 @@ async function handleUpdate(req, res) {
 
 async function handleDelete(req, res) {
   const { id } = req.params;
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
+  }
 
   if (
     !id ||
@@ -236,9 +250,14 @@ async function handleDelete(req, res) {
   }
 }
 
-async function handleAddLike(req, res) {
+async function handleReaction(req, res) {
   const { id } = req.params;
+  const { type } = req.body; // 'like' or 'dislike'
   const userId = req.userId;
+
+  if (!["like", "dislike"].includes(type)) {
+    return res.status(400).json(new ApiError(400, "Invalid reaction type"));
+  }
 
   try {
     const blog = await Blog.findById(id);
@@ -247,69 +266,60 @@ async function handleAddLike(req, res) {
     const hasLiked = blog.likedBy.includes(userId);
     const hasDisliked = blog.dislikedBy.includes(userId);
 
-    if (hasLiked) {
-      blog.likes -= 1;
-      blog.likedBy = blog.likedBy.filter((id) => id.toString() !== userId);
-    } else {
+    if (type === "like") {
+      if (hasLiked) {
+        blog.likes -= 1;
+        blog.likedBy = blog.likedBy.filter((uid) => uid.toString() !== userId);
+      } else {
+        if (hasDisliked) {
+          blog.disLikes -= 1;
+          blog.dislikedBy = blog.dislikedBy.filter(
+            (uid) => uid.toString() !== userId
+          );
+        }
+        blog.likes += 1;
+        blog.likedBy.push(userId);
+      }
+    }
+
+    if (type === "dislike") {
       if (hasDisliked) {
         blog.disLikes -= 1;
         blog.dislikedBy = blog.dislikedBy.filter(
-          (id) => id.toString() !== userId
+          (uid) => uid.toString() !== userId
         );
+      } else {
+        if (hasLiked) {
+          blog.likes -= 1;
+          blog.likedBy = blog.likedBy.filter(
+            (uid) => uid.toString() !== userId
+          );
+        }
+        blog.disLikes += 1;
+        blog.dislikedBy.push(userId);
       }
-      blog.likes += 1;
-      blog.likedBy.push(userId);
     }
 
-    const newBlog = await blog.save();
+    const updatedBlog = await blog.save();
     return res
       .status(200)
-      .json(new ApiResponse(200, newBlog, "Like updated", blog));
+      .json(new ApiResponse(200, updatedBlog, `${type} updated`, updatedBlog));
   } catch (error) {
-    console.error("Error in liking post:", error);
-    return res.status(500).json(new ApiError(500, "Error in liking post:"));
-  }
-}
-
-async function handleAddDislike(req, res) {
-  const { id } = req.params;
-  const userId = req.userId;
-
-  try {
-    const blog = await Blog.findById(id);
-    if (!blog) return res.status(404).json(new ApiError(404, "Blog Not Found"));
-
-    const hasLiked = blog.likedBy.includes(userId);
-    const hasDisliked = blog.dislikedBy.includes(userId);
-
-    if (hasDisliked) {
-      blog.disLikes -= 1;
-      blog.dislikedBy = blog.dislikedBy.filter(
-        (id) => id.toString() !== userId
-      );
-    } else {
-      if (hasLiked) {
-        blog.likes -= 1;
-        blog.likedBy = blog.likedBy.filter((id) => id.toString() !== userId);
-      }
-
-      blog.disLikes += 1;
-      blog.dislikedBy.push(userId);
-    }
-
-    const newBlog = await blog.save();
-    return res
-      .status(200)
-      .json(new ApiResponse(200, newBlog, "DisLike updated", blog));
-  } catch (error) {
-    console.error("Error in disliking post:", error);
-    return res.status(500).json(new ApiError(500, "Error in disliking post:"));
+    console.error(`Error in ${type} post:`, error);
+    return res.status(500).json(new ApiError(500, `Error in ${type} post.`));
   }
 }
 
 async function handleAddComment(req, res) {
   const { content } = req.body;
   const { id } = req.params;
+
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
+  }
+
   try {
     const newComment = new Comment({
       content: content,
@@ -353,6 +363,12 @@ async function handleAddComment(req, res) {
 }
 
 async function handleGetAllComments(req, res) {
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json(new ApiError(400, result.array()));
+  }
+
   try {
     const comments = await Comment.find({ blogId: req.params.id })
       .sort({ _id: -1 })
@@ -385,10 +401,9 @@ export {
   handleUpdate,
   handleDelete,
   handleGetAllBlogs,
-  handleAddLike,
-  handleAddDislike,
   handleAddComment,
   handleGetAllComments,
   handleGetBlog,
   handleGetAllBlogsOfUser,
+  handleReaction,
 };

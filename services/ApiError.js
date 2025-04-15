@@ -1,7 +1,7 @@
 class ApiError {
-  constructor(statusCode, message = "Something Went Wrong", success = false) {
+  constructor(statusCode, errors = "Something Went Wrong", success = false) {
     this.statusCode = statusCode;
-    this.message = message;
+    this.errors = errors;
     this.success = false;
   }
 }

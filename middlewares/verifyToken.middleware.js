@@ -2,14 +2,15 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "../services/ApiError.js";
 
 export const verifyToken = (req, res, next) => {
-  const token = req.cookies.token;
+  const authHeader = req.headers.authorization;
 
-  if (!token)
+  if (!authHeader || !authHeader.startsWith("Bearer "))
     return res
       .status(401)
       .json(new ApiError(401, "UnAuthorized - No Token Provided."));
 
   try {
+    const token = authHeader.split(" ")[1];
     const decodeToken = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decodeToken) {
